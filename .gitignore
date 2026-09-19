@@ -1,0 +1,37 @@
+# Virtual environment
+env/
+venv/
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# secrets
+.env
+.env.*
+
+# IDE/editor
+.vscode/
+.idea/
+*.swp
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+
+# Logs
+*.log
+
+# Pytest / test artifacts
+.pytest_cache/
+tests/test_pos.db
+
+# Distribution
+build/
+dist/
+*.egg-info/
