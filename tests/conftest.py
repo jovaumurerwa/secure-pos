@@ -1,24 +1,28 @@
-
 import itertools
 import os
 import sys
 from pathlib import Path
 
 
-TEST_DB_PATH = Path(__file__).parent / "test_pos.db"
-os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB_PATH}"
+# ---------- Test settings (must run BEFORE the app is imported) ----------
 
+TEST_DB_PATH = Path(__file__).parent / "test_pos.db"
+os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB_PATH}"                    # tests use a throwaway SQLite file
+os.environ.setdefault("JWT_SECRET", "test-only-secret-not-for-production")  # fake secret, tests only
+
+# Let tests import app code like "from database import ..."
 APP_DIR = Path(__file__).resolve().parent.parent / "app"
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
 import pytest  # noqa: E402
-from fastapi.testclient import TestClient  
-from sqlalchemy import event 
-from database import Base, engine  
+from fastapi.testclient import TestClient
+from sqlalchemy import event
+from database import Base, engine
 from main import app
 
 
+# SQLite ignores foreign keys unless we switch them on
 @event.listens_for(engine, "connect")
 def _enable_sqlite_foreign_keys(dbapi_connection, connection_record):
     cursor = dbapi_connection.cursor()
@@ -26,6 +30,7 @@ def _enable_sqlite_foreign_keys(dbapi_connection, connection_record):
     cursor.close()
 
 
+# Every test starts with fresh, empty tables
 @pytest.fixture(autouse=True)
 def _isolated_schema():
     Base.metadata.drop_all(bind=engine)
@@ -34,6 +39,7 @@ def _isolated_schema():
     Base.metadata.drop_all(bind=engine)
 
 
+# Delete the test database file when all tests finish
 def pytest_sessionfinish(session, exitstatus):
     try:
         TEST_DB_PATH.unlink()
@@ -41,12 +47,55 @@ def pytest_sessionfinish(session, exitstatus):
         pass
 
 
+# ---------- Login helpers (NEW in Step 5) ----------
+
+TEST_ADMIN_USERNAME = "test_admin"
+TEST_ADMIN_PASSWORD = "Admin-Pass-123!"
+
+
+def _create_test_admin():
+    """Put one admin straight into the database, so tests can log in."""
+    from database import session
+    from models.user import User
+    from core.security import hash_password
+
+    db = session()
+    try:
+        db.add(User(
+            full_name="Test Admin",
+            username=TEST_ADMIN_USERNAME,
+            password_hash=hash_password(TEST_ADMIN_PASSWORD),
+            role="Admin",
+            is_active=True,
+        ))
+        db.commit()
+    finally:
+        db.close()
+
+
 @pytest.fixture
-def client():
+def anon_client():
+    """A client with NO token, used to prove protected routes say 401."""
     with TestClient(app) as test_client:
         yield test_client
 
 
+@pytest.fixture
+def client():
+    """A logged-in client. Logs in through the real /auth/login route."""
+    _create_test_admin()
+    with TestClient(app) as test_client:
+        response = test_client.post(
+            "/auth/login",
+            data={"username": TEST_ADMIN_USERNAME, "password": TEST_ADMIN_PASSWORD},
+        )
+        assert response.status_code == 200, response.text
+        token = response.json()["access_token"]
+        test_client.headers["Authorization"] = f"Bearer {token}"  # every request now sends the token
+        yield test_client
+
+
+# ---------- Data factories (unchanged; they use the logged-in client) ----------
 
 @pytest.fixture
 def make_category(client):
@@ -155,7 +204,6 @@ def make_customer(client):
 
 @pytest.fixture
 def make_sale(client, make_user, make_product):
-
     def _make(**overrides):
         user_id = overrides.pop("user_id", None)
         if user_id is None:

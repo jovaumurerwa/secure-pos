@@ -1,11 +1,9 @@
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
-from passlib.context import CryptContext
 
 from repository.user_repository import user_repository
 from schemas.user import UserCreate, UserUpdate
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+from core.security import hash_password
 
 
 def get_user(db: Session, id: int):
@@ -22,7 +20,7 @@ def list_users(db: Session):
 def create_user(db: Session, data: UserCreate):
     user_data = data.model_dump()
     plain_password = user_data.pop("password")
-    user_data["password_hash"] = pwd_context.hash(plain_password)
+    user_data["password_hash"] = hash_password(plain_password)
     return user_repository.create(db, user_data)
 
 
@@ -31,7 +29,7 @@ def update_user(db: Session, user_id: int, data: UserUpdate):
     update_data = data.model_dump(exclude_unset=True)
     if "password" in update_data:
         plain_password = update_data.pop("password")
-        update_data["password_hash"] = pwd_context.hash(plain_password)
+        update_data["password_hash"] = hash_password(plain_password)
     return user_repository.update(db, user, update_data)
 
 

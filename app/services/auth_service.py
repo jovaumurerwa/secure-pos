@@ -1,66 +1,52 @@
 from typing import Any
-from fastapi import HTTPException, status
 
+from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from core.security import (
-    create_access_token,
-    decode_access_token,
-    hash_password,
-    verify_password,
-)
-
+from core.security import create_access_token, decode_access_token, hash_password, verify_password
 from repository.user_repository import user_repository
-from schemas.user import UserCreate
 
-def register(db: Session, data: UserCreate):
-    if user_repository.get_by_username(db=data.username):
-        raise HTTPException(
-            status_code = status.HTTP_400_BAD_REQUEST,
-            detail = "Username already taken",
-        )
-    values = data.model_dump(exclude={'password'})
-    values['hashed_password'] = hash_password(data.password)
-    return user_repository.create(db, values)
 
-def authenticate(db:Session, username: str, password: str):
-    user = user_repository.get_by_username(db, username)
-    if not user or not verify_password(password, user.hashed_password):
-        raise HTTPException(
-            status_code= status.HTTP_401_UNAUTHORIZED,
-            detail='Incorrect username or password',
-            headers={'WWW-Authenticate': 'Bearer'},
-        )
-    return {
-        'access_token': create_access_token(user_id),
-        'token_type': 'bearer'
-    }
-    
-def get_user_from_token(db: Session, token:str):
-    """Validate a JWT and return """
-    credentials_code = HTTPException(
-    status_code=status.HTTP_401_UNAUTHORIZED,
-    detail='Invalid or expired token',
-    headers={'WWW-Authenticate': 'Bearer'},
+_DUMMY_HASH = hash_password("dummy-password-for-timing-only")
+
+
+def authenticate(db: Session, username: str, password: str) -> dict:
+    """Check username + password and return a JWT access token."""
+    login_error = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Incorrect username or password",  # same message for both cases, never say which one was wrong
+        headers={"WWW-Authenticate": "Bearer"},
     )
-    
-    try:
-        payload: dict[str, Any] = decode_access_token(token)
-        subject = payload.get('sub')
-        if not isinstance(subject, str) or not subject.strip():
-            raise credentials_code
-        used_id = int(subject)
-        if used_id <= 0:
-            raise credentials_code
-        
-    except Exception as e:
-        raise credentials_code
-    
-    user = user_repository.get(db, used_id)
+
+    user = user_repository.get_by_username(db, username)
     if user is None:
-        raise credentials_code
+        verify_password(password, _DUMMY_HASH)  # waste the same time as a real check
+        raise login_error
+    if not verify_password(password, user.password_hash):
+        raise login_error
     if not user.is_active:
-        raise HTTPException(
-            status_code= status.HTTP_403_FORBIDDEN,
-            detail='User account is inactive'
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is inactive")
+
+    return {"access_token": create_access_token(user.user_id), "token_type": "bearer"}
+
+
+def get_user_from_token(db: Session, token: str):
+    """Decode a JWT and return the matching active user, or raise 401/403."""
+    credentials_error = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or expired token",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    try:
+        payload: dict[str, Any] = decode_access_token(token)  # checks signature AND expiry
+        user_id = int(payload.get("sub", ""))
+    except Exception:
+        raise credentials_error  # bad signature, expired, or missing "sub"
+
+    user = user_repository.get(db, user_id)
+    if user is None:
+        raise credentials_error  # user was deleted after the token was issued
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is inactive")
+    return user  
