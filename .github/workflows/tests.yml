@@ -1,15 +1,18 @@
-name: Tests
+name: Tests and Security
 
 on:
   push:
   pull_request:
     types: [opened, synchronize, reopened]
 
+permissions:
+  contents: read        
+  pull-requests: read   
+
 jobs:
   test:
     name: Run test suite
     runs-on: ubuntu-latest
-
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -27,3 +30,31 @@ jobs:
 
       - name: Run test suite
         run: pytest -v
+
+  security:
+    name: Security scans
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0           
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install scanners
+        run: pip install bandit pip-audit
+
+      - name: Bandit - finds unsafe code patterns
+        run: bandit -r app -ll        
+
+      - name: pip-audit - finds libraries with known vulnerabilities
+        run: pip-audit -r requirements.txt
+
+      - name: Gitleaks - finds leaked secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

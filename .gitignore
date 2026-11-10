@@ -35,3 +35,6 @@ tests/test_pos.db
 build/
 dist/
 *.egg-info/
+!.env.example
+
+*.db
