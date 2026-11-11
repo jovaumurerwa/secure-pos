@@ -4,13 +4,11 @@ import sys
 from pathlib import Path
 
 
-# ---------- Test settings (must run BEFORE the app is imported) ----------
 
 TEST_DB_PATH = Path(__file__).parent / "test_pos.db"
-os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB_PATH}"                    # tests use a throwaway SQLite file
-os.environ.setdefault("JWT_SECRET", "test-only-secret-not-for-production")  # fake secret, tests only
+os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB_PATH}"
+os.environ.setdefault("JWT_SECRET", "test-only-secret-not-for-production")
 
-# Let tests import app code like "from database import ..."
 APP_DIR = Path(__file__).resolve().parent.parent / "app"
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
@@ -22,7 +20,6 @@ from database import Base, engine
 from main import app
 
 
-# SQLite ignores foreign keys unless we switch them on
 @event.listens_for(engine, "connect")
 def _enable_sqlite_foreign_keys(dbapi_connection, connection_record):
     cursor = dbapi_connection.cursor()
@@ -30,7 +27,6 @@ def _enable_sqlite_foreign_keys(dbapi_connection, connection_record):
     cursor.close()
 
 
-# Every test starts with an empty login-attempt counter
 @pytest.fixture(autouse=True)
 def _reset_rate_limit():
     from core import rate_limit
@@ -38,7 +34,6 @@ def _reset_rate_limit():
     yield
 
 
-# Every test starts with fresh, empty tables
 @pytest.fixture(autouse=True)
 def _isolated_schema():
     Base.metadata.drop_all(bind=engine)
@@ -47,7 +42,6 @@ def _isolated_schema():
     Base.metadata.drop_all(bind=engine)
 
 
-# Delete the test database file when all tests finish
 def pytest_sessionfinish(session, exitstatus):
     try:
         TEST_DB_PATH.unlink()
@@ -55,7 +49,6 @@ def pytest_sessionfinish(session, exitstatus):
         pass
 
 
-# ---------- Login helpers (NEW in Step 5) ----------
 
 TEST_ADMIN_USERNAME = "test_admin"
 TEST_ADMIN_PASSWORD = "Admin-Pass-123!"
@@ -121,11 +114,10 @@ def client():
         )
         assert response.status_code == 200, response.text
         token = response.json()["access_token"]
-        test_client.headers["Authorization"] = f"Bearer {token}"  # every request now sends the token
+        test_client.headers["Authorization"] = f"Bearer {token}"
         yield test_client
 
 
-# ---------- Data factories (unchanged; they use the logged-in client) ----------
 
 @pytest.fixture
 def make_category(client):

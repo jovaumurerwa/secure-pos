@@ -7,10 +7,8 @@ from conftest import TEST_ADMIN_PASSWORD, TEST_ADMIN_USERNAME
 from core.security import create_access_token, jwt_algorithm, jwt_secret
 
 
-# ---------- Login ----------
 
 def test_login_with_correct_password_returns_token(client, anon_client):
-    # "client" fixture created the admin; anon_client logs in from scratch
     response = anon_client.post(
         "/auth/login", data={"username": TEST_ADMIN_USERNAME, "password": TEST_ADMIN_PASSWORD}
     )
@@ -30,7 +28,6 @@ def test_login_with_wrong_password_returns_401(client, anon_client):
 def test_login_with_unknown_user_gives_same_message_as_wrong_password(client, anon_client):
     wrong_pw = anon_client.post("/auth/login", data={"username": TEST_ADMIN_USERNAME, "password": "nope"})
     no_user = anon_client.post("/auth/login", data={"username": "ghost", "password": "nope"})
-    # Same status + same message, so attackers can't tell which usernames exist
     assert wrong_pw.status_code == no_user.status_code == 401
     assert wrong_pw.json()["detail"] == no_user.json()["detail"]
 
@@ -49,7 +46,6 @@ def test_me_returns_logged_in_user_without_password(client):
     assert "password_hash" not in body
 
 
-# ---------- Protected routes ----------
 
 PROTECTED_ROUTES = [
     "/categories/", "/suppliers/", "/products/", "/users/", "/customers/",
@@ -87,7 +83,7 @@ def test_token_signed_with_wrong_secret_returns_401(client, anon_client):
 
 
 def test_token_for_deleted_user_returns_401(anon_client):
-    token = create_access_token(999999)  # valid signature, but no such user
+    token = create_access_token(999999)
     response = anon_client.get("/products/", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 401
 

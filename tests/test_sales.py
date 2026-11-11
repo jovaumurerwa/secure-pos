@@ -154,14 +154,14 @@ def test_create_sale_ignores_client_user_id_and_uses_logged_in_user(client, make
     response = client.post(
         "/sales/",
         json={
-            "user_id": 999999,  # attacker tries to record the sale as someone else
+            "user_id": 999999,
             "sale_items": [{"product_id": product["product_id"], "quantity": 1}],
             "payments": [{"payment_method": "Cash", "amount": 100.00}],
         },
     )
 
     assert response.status_code == 201
-    assert response.json()["user_id"] == me["user_id"]  # server used the token, not the request
+    assert response.json()["user_id"] == me["user_id"]
 
 
 def test_create_sale_nonexistent_customer_returns_400(client, make_user, make_product):

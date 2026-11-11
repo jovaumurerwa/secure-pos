@@ -13,7 +13,6 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 
 @router.post("/login")
 def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    # Count failures per IP address AND username, so one attacker can't lock out everyone
     client_ip = request.client.host if request.client else "unknown"
     key = f"{client_ip}:{form.username.lower()}"
 
@@ -29,7 +28,7 @@ def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Ses
         token = auth_service.authenticate(db, form.username, form.password)
     except HTTPException as error:
         if error.status_code == status.HTTP_401_UNAUTHORIZED:
-            rate_limit.record_failure(key)  # only wrong passwords count
+            rate_limit.record_failure(key)
         raise
 
     rate_limit.clear(key)
@@ -38,5 +37,4 @@ def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Ses
 
 @router.get("/me", response_model=UserRead)
 def read_me(current_user=Depends(get_current_user)):
-    # Returns whoever owns the token. The frontend uses this to show "Logged in as ..." and pick screens by role
     return current_user

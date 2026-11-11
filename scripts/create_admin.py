@@ -2,21 +2,20 @@ import getpass
 import sys
 from pathlib import Path
 
-# Let this script import the app's code
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "app"))
 
 from database import Base, engine, session  # noqa: E402
-from models import category, supplier, product, user, customer, sale, sale_item, payment, receipt  # noqa: E402,F401  (registers all tables)
+from models import category, supplier, product, user, customer, sale, sale_item, payment, receipt  # noqa: E402,F401
 from models.user import User  # noqa: E402
 from core.security import hash_password  # noqa: E402
 
 
 def main():
-    Base.metadata.create_all(bind=engine)  # makes the tables in pos_db if they don't exist yet
+    Base.metadata.create_all(bind=engine)
 
     username = input("Admin username: ").strip()
     full_name = input("Full name: ").strip()
-    password = getpass.getpass("Password (min 12 characters, hidden while typing): ")  # never shown on screen
+    password = getpass.getpass("Password (min 12 characters, hidden while typing): ")
     if len(password) < 12:
         sys.exit("Password too short. Use at least 12 characters.")
     if password != getpass.getpass("Repeat password: "):
@@ -29,7 +28,7 @@ def main():
         db.add(User(
             full_name=full_name,
             username=username,
-            password_hash=hash_password(password),  # only the hash is stored, never the password
+            password_hash=hash_password(password),
             role="Admin",
             is_active=True,
         ))
