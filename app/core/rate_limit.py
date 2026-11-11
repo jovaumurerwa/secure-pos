@@ -1,0 +1,38 @@
+import time
+from collections import defaultdict, deque
+
+# Simple in-memory login limiter: 5 failed tries per 15 minutes, per IP + username.
+# Trade-off: it resets when the server restarts and is per process.
+# In production with several servers you would store this in Redis instead.
+MAX_FAILED_ATTEMPTS = 5
+WINDOW_SECONDS = 15 * 60
+
+_failed_attempts: dict[str, deque] = defaultdict(deque)
+
+
+def _drop_old(key: str, now: float) -> deque:
+    attempts = _failed_attempts[key]
+    while attempts and now - attempts[0] > WINDOW_SECONDS:
+        attempts.popleft()  # forget failures older than the window
+    return attempts
+
+
+def seconds_until_allowed(key: str) -> int:
+    """0 means the user may try again. Otherwise, how many seconds to wait."""
+    now = time.monotonic()
+    attempts = _drop_old(key, now)
+    if len(attempts) < MAX_FAILED_ATTEMPTS:
+        return 0
+    return int(WINDOW_SECONDS - (now - attempts[0])) + 1
+
+
+def record_failure(key: str) -> None:
+    _failed_attempts[key].append(time.monotonic())
+
+
+def clear(key: str) -> None:
+    _failed_attempts.pop(key, None)  # successful login wipes the counter
+
+
+def reset_all() -> None:
+    _failed_attempts.clear()  # used by tests so each test starts clean

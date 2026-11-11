@@ -1,31 +1,46 @@
 from datetime import datetime
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict, Field
+
+# Only these two roles exist. Anything else is rejected with 422.
+Role = Literal["Admin", "Cashier"]
+
+# Password rules: long passwords beat short "complex" ones. Max length blocks huge-input attacks.
+Password = Annotated[str, Field(min_length=12, max_length=128)]
+
+# Usernames: 3-50 characters, only letters, numbers, dot, dash, underscore
+Username = Annotated[str, Field(min_length=3, max_length=50, pattern=r"^[A-Za-z0-9._-]+$")]
+
+FullName = Annotated[str, Field(min_length=1, max_length=150)]
 
 
-class UserBase(BaseModel):
+class UserCreate(BaseModel):
+    full_name: FullName
+    username: Username
+    role: Role
+    email: str | None = None
+    is_active: bool = True
+    password: Password
+
+
+class UserUpdate(BaseModel):
+    full_name: FullName | None = None
+    username: Username | None = None
+    role: Role | None = None
+    email: str | None = None
+    is_active: bool | None = None
+    password: Password | None = None
+
+
+class UserRead(BaseModel):
+    # What the API sends back. No password or password_hash, ever.
+    model_config = ConfigDict(from_attributes=True)
+
+    user_id: int
     full_name: str
     username: str
     role: str
     email: str | None = None
-    is_active: bool = True
-
-
-class UserCreate(UserBase):
-    password: str
-
-
-class UserUpdate(BaseModel):
-    full_name: str | None = None
-    username: str | None = None
-    role: str | None = None
-    email: str | None = None
-    is_active: bool | None = None
-    password: str | None = None
-
-
-class UserRead(UserBase):
-    model_config = ConfigDict(from_attributes=True)
-
-    user_id: int
+    is_active: bool
     created_at: datetime
