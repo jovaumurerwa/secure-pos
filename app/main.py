@@ -27,36 +27,31 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Secure POS API", version="1.2.0")
 
-# ---------- CORS: only our own frontend may call the API from a browser ----------
 frontend_origins = [o.strip() for o in os.getenv("FRONTEND_ORIGINS", "http://localhost:3000").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=frontend_origins,          # never "*" when sending credentials
+    allow_origins=frontend_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
 )
 
 
-# ---------- Security headers on every response ----------
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
-    response.headers["X-Content-Type-Options"] = "nosniff"   # browser must not guess file types
-    response.headers["X-Frame-Options"] = "DENY"             # page can't be put inside another site (clickjacking)
-    response.headers["Referrer-Policy"] = "no-referrer"      # don't leak URLs to other sites
-    response.headers["Cache-Control"] = "no-store"           # don't cache sales or user data
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Cache-Control"] = "no-store"
     return response
 
 
-# ---------- Routes ----------
-# Public
 app.include_router(auth_router.router)
 
-# Who can do what (Admin can always do everything):
-ADMIN_ONLY = [Depends(cashier_can())]                         # cashiers: nothing
-CASHIER_READ = [Depends(cashier_can("GET"))]                  # cashiers: look only
-CASHIER_SELL = [Depends(cashier_can("GET", "POST"))]          # cashiers: look + create, no edit/delete
+ADMIN_ONLY = [Depends(cashier_can())]
+CASHIER_READ = [Depends(cashier_can("GET"))]
+CASHIER_SELL = [Depends(cashier_can("GET", "POST"))]
 
 app.include_router(user_router.router, dependencies=ADMIN_ONLY)
 app.include_router(supplier_router.router, dependencies=ADMIN_ONLY)

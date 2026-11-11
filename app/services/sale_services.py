@@ -110,7 +110,7 @@ def create_sale(db: Session, data: SaleCreate, seller_id: int):
     sale = Sale(
         sale_number=sale_number,
         customer_id=sale_data.get("customer_id"),
-        user_id=seller_id,  # comes from the token, see routers/sale.py
+        user_id=seller_id,
         subtotal=subtotal,
         discount_amount=discount_amount,
         tax_amount=tax_amount,

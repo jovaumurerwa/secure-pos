@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from database import get_db
-#I will change this by the way
 from dependencies import get_current_user
 from schemas.product import ProductCreate, ProductUpdate, ProductRead
 from services import product_services

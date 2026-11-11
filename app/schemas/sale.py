@@ -9,8 +9,6 @@ from .payment import PaymentCreate, PaymentRead
 
 class SaleCreate(BaseModel):
     customer_id: int | None = None
-    # No user_id here on purpose: the server takes it from the login token,
-    # so a cashier can't record a sale under someone else's name.
     discount_amount: Decimal | None = 0
     sale_items: list[SaleItemCreate]
     payments: list[PaymentCreate]

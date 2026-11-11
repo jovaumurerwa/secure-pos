@@ -21,7 +21,6 @@ def get_sale(sale_id: int, db: Session = Depends(get_db)):
 
 @router.post("/", response_model=SaleRead, status_code=status.HTTP_201_CREATED)
 def create_sale(data: SaleCreate, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
-    # The seller is whoever is logged in, never a value sent by the client
     return sale_services.create_sale(db, data, seller_id=current_user.user_id)
 
 

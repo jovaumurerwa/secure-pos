@@ -3,13 +3,10 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-# Only these two roles exist. Anything else is rejected with 422.
 Role = Literal["Admin", "Cashier"]
 
-# Password rules: long passwords beat short "complex" ones. Max length blocks huge-input attacks.
 Password = Annotated[str, Field(min_length=12, max_length=128)]
 
-# Usernames: 3-50 characters, only letters, numbers, dot, dash, underscore
 Username = Annotated[str, Field(min_length=3, max_length=50, pattern=r"^[A-Za-z0-9._-]+$")]
 
 FullName = Annotated[str, Field(min_length=1, max_length=150)]
@@ -34,7 +31,6 @@ class UserUpdate(BaseModel):
 
 
 class UserRead(BaseModel):
-    # What the API sends back. No password or password_hash, ever.
     model_config = ConfigDict(from_attributes=True)
 
     user_id: int

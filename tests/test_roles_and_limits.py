@@ -3,7 +3,6 @@ import pytest
 from core.rate_limit import MAX_FAILED_ATTEMPTS
 
 
-# ---------- Roles: what a cashier can and cannot do ----------
 
 def test_cashier_can_read_products(cashier_client):
     assert cashier_client.get("/products/").status_code == 200
@@ -56,7 +55,6 @@ def test_admin_can_do_admin_things(client):
     assert client.get("/suppliers/").status_code == 200
 
 
-# ---------- Input rules ----------
 
 def test_short_password_is_rejected(client):
     response = client.post("/users/", json={
@@ -79,7 +77,6 @@ def test_weird_username_is_rejected(client):
     assert response.status_code == 422
 
 
-# ---------- Rate limiting on login ----------
 
 def test_login_is_blocked_after_too_many_wrong_passwords(client, anon_client):
     for _ in range(MAX_FAILED_ATTEMPTS):
@@ -95,12 +92,10 @@ def test_even_correct_password_is_blocked_while_locked(client, anon_client):
     from conftest import TEST_ADMIN_PASSWORD
     for _ in range(MAX_FAILED_ATTEMPTS):
         anon_client.post("/auth/login", data={"username": "test_admin", "password": "wrong"})
-    # Otherwise an attacker could keep guessing and just watch for a 200
     r = anon_client.post("/auth/login", data={"username": "test_admin", "password": TEST_ADMIN_PASSWORD})
     assert r.status_code == 429
 
 
-# ---------- Security headers and CORS ----------
 
 def test_security_headers_are_present(anon_client):
     headers = anon_client.get("/").headers
