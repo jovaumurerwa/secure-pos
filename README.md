@@ -1,209 +1,142 @@
-# POS System API
+# Secure POS API
 
-A backend REST API for a Point of Sale (POS) system, built with FastAPI, SQLAlchemy, and PostgreSQL. It supports product catalog management, inventory tracking, staff accounts, customer records, sales transactions with split payments, and receipt generation  designed for small to medium retail businesses (supermarkets, convenience stores, pharmacies, restaurant counters).
+A point-of-sale backend for small retail businesses (shops, pharmacies, supermarkets), built with **FastAPI**, **SQLAlchemy** and **PostgreSQL**, and hardened against common API attacks.
+
+It handles products, stock, suppliers, customers, staff accounts, sales with split payments, and receipts. Every route is protected by login and role checks, and every push runs automated tests and security scans.
+
+---
+
+## Security features
+
+| Threat | Protection | Where |
+|---|---|---|
+| Anyone calling the API | JWT login required on every route (401 without a valid token) | `app/main.py`, `app/dependencies.py` |
+| Staff doing more than their job | Role-based access. **Admin**: everything. **Cashier**: view products, make sales, add customers. No price changes, no deleting sales, no access to users or suppliers. Unknown roles are denied | `app/dependencies.py` |
+| Password guessing | 5 failed logins per IP + username in 15 minutes → **429**, even if the next password is right | `app/core/rate_limit.py` |
+| Finding valid usernames | Same error and the same response time for "wrong user" and "wrong password" | `app/services/auth_service.py` |
+| Stolen or forged tokens | Tokens expire after 15 minutes; signature, expiry and subject are checked; deleted or inactive users are rejected | `app/core/security.py` |
+| Weak or stolen password database | Argon2 hashing; 12–128 character passwords; hashes are never returned by the API | `app/core/security.py`, `app/schemas/user.py` |
+| Recording a sale as someone else | The seller is taken from the login token, never from the request | `app/routers/sale.py` |
+| Price tampering | Prices, totals and stock are calculated on the server; client totals are ignored | `app/services/sale_services.py` |
+| Other websites calling the API | CORS allows only the configured frontend origin | `app/main.py` |
+| Clickjacking, MIME sniffing, caching of sales data | Security headers on every response | `app/main.py` |
+| Secrets leaking through code | All secrets in `.env`; the app refuses to start without them; `.env` is git-ignored | `app/core/security.py`, `app/database.py` |
+| Over-privileged database user | The app connects as a dedicated `pos_user` that only owns `pos_db` | Setup below |
+| Vulnerable libraries, unsafe code, leaked secrets | **pip-audit**, **Bandit** and **Gitleaks** run in CI on every push; Dependabot alerts on | `.github/workflows/tests.yml` |
 
 ## Features
 
-- Product catalog with categories and suppliers
-- Real-time stock/inventory tracking, automatically deducted on sale
-- Staff accounts with role-based access (Admin, Manager, Cashier)
-- Customer records with optional loyalty point tracking
-- Sales transactions supporting multiple line items per sale
-- Split payments (multiple payment methods per sale)
-- Automatic receipt issuance
-- Server-side price lookup and stock validation  prices and totals are never trusted from the client
-- Relationship integrity enforcement (e.g. a sale item cannot reference a product that doesn't exist)
+- Product catalogue with categories and suppliers
+- Stock tracking, deducted automatically on each sale
+- Sales with multiple items and split payments (e.g. cash + mobile money)
+- Automatic sale numbers and receipts
+- Customer records with loyalty points
 
-## Tech Stack
+## Tech stack
 
-- **Framework:** FastAPI
-- **ORM:** SQLAlchemy
-- **Database:** PostgreSQL
-- **Validation:** Pydantic
-- **Password hashing:** Passlib (bcrypt)
+Python 3.12 · FastAPI · SQLAlchemy · PostgreSQL · Pydantic · PyJWT · Argon2 (pwdlib) · Pytest · GitHub Actions
 
-## Project Structure
+## Architecture
 
+```
+Request → Router → Service → Repository → Model → PostgreSQL
+            │         │
+            │         └─ business rules: prices, stock, payments, 404s
+            └─ auth + role check runs before every protected route
+```
+
+```
 app/
-├── models/ # SQLAlchemy ORM models (one file per entity)
-├── schemas/ # Pydantic request/response schemas
-├── repository/ # Data access layer (CRUD against the DB)
-├── services/ # Business logic (validation, orchestration, stock/price rules)
-├── routers/ # FastAPI route definitions (HTTP layer)
-├── database.py # DB engine, session, and dependency injection
-└── main.py # FastAPI app entrypoint, router registration
-
-tests/ # Pytest suite (isolated SQLite test DB, one file per entity)
-.github/workflows/tests.yml # CI: runs the test suite on push/PR
-
-
-The architecture follows a layered flow:
-**Router → Service → Repository → Model**
-Routers stay thin (no business logic). Services hold all business rules — including 404 handling, price/stock lookups, and relationship validation. Repositories handle raw CRUD. Models define the database schema.
-
-## Data Model
-
-The system has 9 entities:
-
-| Entity | Description |
-|---|---|
-| Category | Product categories |
-| Supplier | Product suppliers |
-| Product | Catalog items, stock, pricing |
-| User | Staff accounts (Admin/Manager/Cashier) |
-| Customer | Customer records, loyalty points |
-| Sale | A completed transaction |
-| SaleItem | Line items within a sale (product + quantity) |
-| Payment | Payment(s) applied to a sale (supports splits) |
-| Receipt | Proof-of-purchase issued for a sale |
-
-Key relationships:
-- Category → Product (one-to-many)
-- Supplier → Product (one-to-many)
-- Customer → Sale (one-to-many)
-- User → Sale (one-to-many, the cashier who processed it)
-- Sale → SaleItem (one-to-many)
-- Sale → Payment (one-to-many, supports split payments)
-- Sale → Receipt (one-to-one)
-- Product ↔ Sale (many-to-many, resolved through SaleItem)
-
-## Setup Instructions
-
-### 1. Clone the repository
-
-```bash
-git clone git@github.com:marymachariam/pos-system.git
-cd pos-system
+├── core/          security.py (JWT, hashing), rate_limit.py
+├── models/        SQLAlchemy tables
+├── schemas/       Pydantic validation (input rules live here)
+├── repository/    database access
+├── services/      business logic
+├── routers/       HTTP endpoints
+├── dependencies.py  login and role checks
+└── main.py        app setup, CORS, security headers, route protection
+scripts/create_admin.py   creates the first admin safely
+tests/                    140+ tests
 ```
 
-### 2. Create and activate a virtual environment
+## Run it locally
+
+**1. Install**
 
 ```bash
-python3 -m venv env
-source env/bin/activate
-```
-
-### 3. Install dependencies
-
-```bash
+git clone https://github.com/jovaumurerwa/secure-pos.git
+cd secure-pos
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4. Set up PostgreSQL
-
-Create the database:
-
-```bash
-createdb pos_db
-```
-
-or via `psql`:
+**2. Create the database and a dedicated user** (in psql or DBeaver, as the postgres admin)
 
 ```sql
-CREATE DATABASE pos_db;
+CREATE USER pos_user WITH PASSWORD 'choose-a-strong-password';
+CREATE DATABASE pos_db OWNER pos_user;
 ```
 
-### 5. Configure environment variables
-
-Create a `.env` file inside the `app/` directory:
-
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/pos_db
-
-
-Adjust the username, password, host, and port to match your local PostgreSQL setup.
-
-### 6. Run the application
+**3. Configure secrets**
 
 ```bash
-cd app
-uvicorn main:app --reload
+cp .env.example .env
+python -c "import secrets; print(secrets.token_hex(32))"   # paste the output as JWT_SECRET in .env
 ```
 
-The API will be available at `http://127.0.0.1:8000`.
-Tables are created automatically on startup.
+Then set `DATABASE_URL` in `.env` with your `pos_user` password.
 
-### 7. Explore the API
-
-Open the interactive Swagger docs at:
-
-http://127.0.0.1:8000/docs
-
-
-## API Endpoints
-
-All endpoints support standard REST operations (`GET`, `POST`, `PUT`, `DELETE`) unless noted otherwise.
-
-| Resource | Base Path |
-|---|---|
-| Categories | `/categories` |
-| Suppliers | `/suppliers` |
-| Products | `/products` |
-| Users | `/users` |
-| Customers | `/customers` |
-| Sales | `/sales` |
-| Sale Items | `/sale-items` |
-| Payments | `/payments` |
-| Receipts | `/receipts` |
-
-**Checkout flow:** `POST /sales/` accepts a nested payload of `sale_items` and `payments` in a single request. The server:
-1. Looks up each product's real price and confirms stock is available
-2. Deducts stock
-3. Calculates subtotal/tax/total from the actual line items (never trusts client-submitted totals)
-4. Validates that submitted payments sum to the total
-5. Generates a unique sale number
-6. Commits the sale, its items, and its payments atomically
-
-## Running Tests
-
-The project has an automated Pytest suite in `tests/` that exercises the API end-to-end through FastAPI's `TestClient`. It never touches the real PostgreSQL development database — before the app is imported, the tests point `DATABASE_URL` at a throwaway, isolated SQLite database file (created fresh per test run and deleted afterwards), and every table is dropped and recreated before each individual test so tests never leak state into one another.
-
-### 1. Install dependencies
-
-Make sure your virtual environment is active, then:
+**4. Create the first admin** (the password is typed hidden, never stored in code)
 
 ```bash
-pip install -r requirements.txt
+python scripts/create_admin.py
 ```
 
-(`pytest` and `httpx` — needed for `TestClient` — are already listed in `requirements.txt`.)
-
-### 2. Run the full suite
-
-From the repository root:
+**5. Start the API**
 
 ```bash
-pytest
+uvicorn main:app --app-dir app --reload
 ```
 
-Add `-v` for per-test output, or target a single file/test, e.g.:
+Open http://127.0.0.1:8000/docs, click **Authorize**, and log in.
+
+## API overview
+
+| Resource | Path | Admin | Cashier |
+|---|---|---|---|
+| Login, current user | `/auth/login`, `/auth/me` | ✅ | ✅ |
+| Products, categories | `/products`, `/categories` | full | view only |
+| Sales, sale items, payments, receipts | `/sales`, `/sale-items`, `/payments`, `/receipts` | full | view + create |
+| Customers | `/customers` | full | view + create |
+| Users, suppliers | `/users`, `/suppliers` | full | ❌ |
+
+**Checkout:** `POST /sales/` takes the items and payments in one request. The server looks up real prices, checks and deducts stock, calculates totals, checks that payments add up, records the logged-in cashier, and saves everything in one transaction.
+
+## Tests
 
 ```bash
-pytest tests/test_sales.py
-pytest tests/test_sales.py::test_create_sale_with_insufficient_stock_returns_400
+pytest -v
 ```
 
-### What's covered
+The tests use a throwaway SQLite database and cover:
 
-Tests live in `tests/`, one file per entity, plus a shared `tests/conftest.py` with fixtures (`client`, and `make_*` factories for creating categories/suppliers/products/users/customers/sales). For every major entity (Category, Supplier, Product, User, Customer, Sale, SaleItem, Payment, Receipt) the suite covers:
+- CRUD, validation (422), not found (404) and bad references (400) for every resource
+- The full checkout flow: server-side prices, stock deduction, split payments, mismatched totals
+- **Security:** no token, garbage token, expired token, forged signature, deleted user, inactive user, same message for wrong user and wrong password, role permissions, privilege escalation (a cashier making herself admin), rate limiting, password rules, security headers and CORS
 
-- Successful create/list/get/update/delete operations
-- `422` validation errors for missing/invalid request data
-- `404` responses for operations on non-existent IDs
-- `400` responses for records referencing non-existent related entities (e.g. a product with a bogus `category_id`, a sale item for a product that doesn't exist)
-- The full sale checkout flow: server-side price/total calculation, stock deduction, insufficient-stock rejection, split-payment validation, and rejecting sales whose payments don't sum to the total
-- Password hashing/verification and JWT helpers in `app/core/security.py`
-- A handful of currently-unhandled edge cases (e.g. duplicate usernames/SKUs, deleting a sale that still has payments/items) are documented as expected exceptions rather than silently skipped, so the suite reflects the API's real behaviour today.
+## Design decisions and trade-offs
 
-### Continuous Integration
+- **Route protection is set in one place** (`main.py`), so a new route can't be left open by mistake.
+- **The rate limiter is in memory.** It is simple and fast, but it resets on restart and isn't shared between servers. With several servers, I would move it to Redis.
+- **Tokens are short-lived (15 minutes)** to limit damage if one is stolen. A production version would add refresh tokens and logout/revocation.
 
-A GitHub Actions workflow (`.github/workflows/tests.yml`) runs the full suite automatically on every push and on every pull request (open/update), so the build fails fast if any test breaks.
+## What I would add next
 
-## Security Notes
-
-- Passwords are hashed with bcrypt before storage; the `password_hash` field is never exposed in API responses.
-- Prices and totals for sales are always computed server-side, never accepted directly from the client.
-- Database credentials are stored in a `.env` file, excluded from version control via `.gitignore`.
+- Refresh tokens and token revocation
+- Audit log of who changed prices, stock and users
+- A Next.js frontend with the token kept in an httpOnly cookie
+- Docker setup and deployment
 
 ## Author
 
-Mary Macharia
+Jeovanis Umurerwa · [GitHub](https://github.com/jovaumurerwa)
