@@ -30,6 +30,14 @@ def _enable_sqlite_foreign_keys(dbapi_connection, connection_record):
     cursor.close()
 
 
+# Every test starts with an empty login-attempt counter
+@pytest.fixture(autouse=True)
+def _reset_rate_limit():
+    from core import rate_limit
+    rate_limit.reset_all()
+    yield
+
+
 # Every test starts with fresh, empty tables
 @pytest.fixture(autouse=True)
 def _isolated_schema():
@@ -71,6 +79,28 @@ def _create_test_admin():
         db.commit()
     finally:
         db.close()
+
+
+def login(test_client, username, password):
+    """Log a TestClient in and make it send the token on every request."""
+    response = test_client.post("/auth/login", data={"username": username, "password": password})
+    assert response.status_code == 200, response.text
+    test_client.headers["Authorization"] = f"Bearer {response.json()['access_token']}"
+    return test_client
+
+
+@pytest.fixture
+def cashier_client(client):
+    """A client logged in as a Cashier (created by the admin client)."""
+    response = client.post("/users/", json={
+        "full_name": "Test Cashier",
+        "username": "test_cashier",
+        "role": "Cashier",
+        "password": "Cashier-Pass-123!",
+    })
+    assert response.status_code == 201, response.text
+    with TestClient(app) as test_client:
+        yield login(test_client, "test_cashier", "Cashier-Pass-123!")
 
 
 @pytest.fixture

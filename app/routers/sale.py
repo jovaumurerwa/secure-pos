@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from database import get_db
+from dependencies import get_current_user
 from schemas.sale import SaleCreate, SaleUpdate, SaleRead
 from services import sale_services
 
@@ -19,8 +20,9 @@ def get_sale(sale_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/", response_model=SaleRead, status_code=status.HTTP_201_CREATED)
-def create_sale(data: SaleCreate, db: Session = Depends(get_db)):
-    return sale_services.create_sale(db, data)
+def create_sale(data: SaleCreate, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    # The seller is whoever is logged in, never a value sent by the client
+    return sale_services.create_sale(db, data, seller_id=current_user.user_id)
 
 
 @router.put("/{sale_id}", response_model=SaleRead)

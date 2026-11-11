@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 from models.sale import Sale
 from repository.sale_repository import sale_repository
 from repository.product_repository import product_repository
-from repository.user_repository import user_repository
 from repository.customer_repository import customer_repository
 from schemas.sale import SaleCreate, SaleUpdate
 
@@ -87,12 +86,10 @@ def list_sales(db: Session):
 TAX_RATE = 0 
 
 
-def create_sale(db: Session, data: SaleCreate):
+def create_sale(db: Session, data: SaleCreate, seller_id: int):
     sale_data = data.model_dump()
     items_data = sale_data.pop("sale_items")
     payments_data = sale_data.pop("payments")
-    if not user_repository.get(db, sale_data["user_id"]):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User does not exist")
 
     if sale_data.get("customer_id") is not None:
         if not customer_repository.get(db, sale_data["customer_id"]):
@@ -113,7 +110,7 @@ def create_sale(db: Session, data: SaleCreate):
     sale = Sale(
         sale_number=sale_number,
         customer_id=sale_data.get("customer_id"),
-        user_id=sale_data["user_id"],
+        user_id=seller_id,  # comes from the token, see routers/sale.py
         subtotal=subtotal,
         discount_amount=discount_amount,
         tax_amount=tax_amount,
